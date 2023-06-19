@@ -2,13 +2,15 @@ import pandas as pd
 import numpy as np
 import sklearn
 from sklearn.feature_selection import mutual_info_classif
+from pathlib import Path
+import sys,os
 
 index = ["bkblk","bknwy","bkon8","bkona","bkspr","bkxbq","bkxcr","bkxwp","blxwp","bxqsq","cntxt","dsopp","dwipd",
  "hdchk","katri","mulch","qxmsq","r2ar8","reskd","reskr","rimmx","rkxwp","rxmsq","simpl","skach","skewr",
  "skrxp","spcop","stlmt","thrsk","wkcti","wkna8","wknck","wkovl","wkpos","wtoeg","win"]
 
 
-data = pd.read_csv('/home/teslator/projects/rough_set/kr-vs-kp_csv.csv')
+data = pd.read_csv('/home/hamid/hamash_amir/research/rough_set_cloned/kr-vs-kp_csv.csv')
 data.rename(columns = {'class':"win"}, inplace=True)
 
 ns = pd.get_dummies(data[data.columns[:-1]], prefix=data.columns[:-1],drop_first=True, dtype=int)
@@ -17,7 +19,7 @@ ns_y = data['win'].copy()
 Y = pd.get_dummies(ns_y,prefix='win',drop_first=True, dtype=int)
 
 
-class colony:
+class Colony:
     
 
 
@@ -31,15 +33,16 @@ class colony:
     feature1: str
     log: list[str] = []
     fg: list[str] = feature_choices.copy()
-    generation_number: int = 0
+    # colony_number: int = 0
+    overall_ant_route: dict = {}
     # if not cls.ant_route:
     #     cls.feature1 = np.random.choice(cls.feature_choices)
     # else:
     #     cls.feature1 = cls.feature_choices[cls.ant_route[-1]]
     
     @classmethod
-    def new_generation(cls):
-        cls.generation_number += 1
+    def add_generation(cls):
+        cls.colony_number += 1
         # cls.reset_colony() 
     
     @classmethod
@@ -49,12 +52,13 @@ class colony:
     @classmethod
     def reset_colony(cls):
         
-        colony.pheromone = np.ones((ns.shape[1], ns.shape[1]))
-        colony.traversed_nodes = np.zeros((ns.shape[1],ns.shape[1]))
-        # colony.ant_route = []
-        # colony.feature1 = ''
-        colony.log = []
-        colony.fg = cls.feature_choices.copy()
+        cls.pheromone = np.ones((ns.shape[1], ns.shape[1]))
+        cls.traversed_nodes = np.zeros((ns.shape[1], ns.shape[1]))
+        # cls.colony_number = 0
+        # cls.ant_route = []
+        # cls.feature1 = ''
+        cls.log = []
+        cls.fg = cls.feature_choices.copy()
         
     @classmethod
     def initialization_alpha_beta(cls, alpha, beta):
@@ -130,19 +134,18 @@ class colony:
         # return fg, fg_index, feat1_dist_prob
     
     @classmethod
-    def ants(cls, make_initialize: bool | None, number_of_ants, 
-             criteria: int | bool = cls.is_rough_set_criteria_met(cls.ant_route)):
+    def ants(
+        cls, make_initialize: bool | None=None,
+        number_of_ants_first_gen: int | None=None,
+        number_of_ants_next_gen: int | None=None, 
+        criteria: int | str | None=None):
         
-        try:
-            if make_initialize == True and criteria == int:
-                cls.initialize_colony(number_of_ants_first_generation=number_of_ants,  init_criteria=criteria)
-            elif (make_initialize == False or make_initialize == None) and criteria == bool:
-                cls.generate_next_ants(number_of_ants_next_generation=number_of_ants,rough_set_criteria=criteria)
-            else:
-                error = Exception("enter valid 'make_initialize' and 'criteria'")
-                raise error
-        except:
-            print(error)
+        if cls.colony_number == 0 or make_initialize == True:
+            cls.initialize_colony(
+                number_of_ants_first_generation=number_of_ants_first_gen,
+                                init_criteria=criteria)
+        cls.generate_next_ants(
+            number_of_ants_next_generation=number_of_ants_next_gen)
 
 
 
@@ -174,55 +177,51 @@ class colony:
     def initialize_colony(cls, number_of_ants_first_generation, init_criteria):
         """
         first of all we run this method for initialize first generation of colony
-        in this method we set manually number_of_ants_first_generation variable to a number
-        As a CRITERIA just for initialize pheromone matrix.in next generations we set rough set feature selection CRITERIA and when selected features by each ant in a colony met this limit that ant stop exploration and next ant begins.
+        in this method we set manually number_of_ants_first_generation variable
+        to a number As a CRITERIA just for initialize pheromone matrix.in next 
+        generations we set rough set feature selection CRITERIA and when 
+        selected features by each ant in a colony met this limit that ant stop
+        exploration and next ant begins.
         CAUTIONS!: RUN THIS METHOD JUST ONE TIME IN EACH COLONY!
         """ 
         
-        try:
-            if cls.generation_number == 0:
-                cls.new_generation()
-                cls.reset_colony()
-                i = 0
-                while i <= init_criteria: 
-                # for j in range(number_of_ants_first_generation):
-                    cls.ant()
-                    i += 1
-                    if (cls.ant_route()) <= init_criteria:
-                        cls.reset_ant_route()
-                        continue
-            else:
-                error = Exception("This is NOT first generation!")
-                raise error
-        except:
-            print(error)
+        # try:
+        #     if cls.colony_number == 0:
+        #         cls.add_generation()
+                # cls.reset_colony()
+        
+        for j in range(number_of_ants_first_generation):
+            i = 0
+            while i <= init_criteria: 
+                cls.ant()
+                i += 1
+            cls.overall_ant_route[j] = cls.ant_route
+            cls.reset_ant_route()
+             
+ 
+        #     else:
+        #         error = Exception("This is NOT first generation!")
+        #         raise error
+        # except:
+        #     print(error)
 
     @classmethod
     def is_rough_set_criteria_met(cls, selected_feature: list[int]) -> bool:
         pass
         
     @classmethod 
-    def generate_next_ants(cls, number_of_ants_next_generation: int,
-                           rough_set_criteria: bool):
+    def generate_next_ants(cls, number_of_ants_next_generation: int):
         
         try:
-            if cls.generation_number > 0:
-
+            if cls.colony_number > 0:
                 i = 0
-                while cls.is_rough_set_criteria_met(cls.ant_route): 
-                # for j in range(number_of_ants_first_generation):
-                    cls.ant()
-                    i += 1
-                    if (cls.ant_route()) <= init_criteria:
-                        cls.reset_ant_route()
-                        continue
-                
                 for i in range(number_of_ants_next_generation):
-                    colony.ant()
-                    i += 1
-                    if cls.is_rough_set_criteria_met(colony.ant_route()):
-                        cls.reset_ant_route()
-                        continue
+                    while not cls.is_rough_set_criteria_met(cls.ant_route): 
+                    # for j in range(number_of_ants_first_generation):
+                        cls.ant()
+                        i += 1
+                    cls.reset_ant_route()
+
             else:
                 error = Exception("Colony generation doesnt initialized first!")
                 raise error
