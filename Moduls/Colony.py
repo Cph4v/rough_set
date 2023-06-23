@@ -4,6 +4,7 @@ import sklearn
 from sklearn.feature_selection import mutual_info_classif
 from pathlib import Path
 import sys,os
+import importlib
 
 index = ["bkblk","bknwy","bkon8","bkona","bkspr","bkxbq","bkxcr","bkxwp","blxwp","bxqsq","cntxt","dsopp","dwipd",
  "hdchk","katri","mulch","qxmsq","r2ar8","reskd","reskr","rimmx","rkxwp","rxmsq","simpl","skach","skewr",
@@ -52,13 +53,13 @@ class Colony:
     @classmethod
     def reset_colony(cls):
         
-        cls.pheromone = np.ones((ns.shape[1], ns.shape[1]))
-        cls.traversed_nodes = np.zeros((ns.shape[1], ns.shape[1]))
-        # cls.colony_number = 0
-        # cls.ant_route = []
-        # cls.feature1 = ''
-        cls.log = []
-        cls.fg = cls.feature_choices.copy()
+        Colony.pheromone = np.ones((ns.shape[1], ns.shape[1]))
+        Colony.traversed_nodes = np.zeros((ns.shape[1], ns.shape[1]))
+        # Colony.colony_number = 0
+        # Colony.ant_route = []
+        Colony.overal_ant_route = {}
+        Colony.log = []
+        Colony.fg = cls.feature_choices.copy()
         
     @classmethod
     def initialization_alpha_beta(cls, alpha, beta):
@@ -91,12 +92,12 @@ class Colony:
         cls.initialize_feature1()
         feature1 = cls.feature1
         features = cls.dataframe.columns.tolist()
-         
-        cls.fg.remove(feature1)
+        if any(feature1 in x for x in cls.fg):
+            cls.fg.remove(feature1)
         i = features.index(feature1)
         if i not in cls.ant_route:
             cls.ant_route.append(i)
-        print(f'ant_route_1 -- {cls.ant_route}')
+            # print(f'ant_route_1 -- {cls.ant_route}')
 
         ### below line cause loop doesnt choose from chosen features
         ### and nodes 
@@ -122,8 +123,8 @@ class Colony:
             feat1_dist_prob[j] = pij
             # ant_route.append(i)
         
-            cls.log.append(f'{features.index(cls.feature1)}' + f'--{features.index(feature2)}--' + f'{pij}')
-        
+            cls.log.append(f'{features.index(cls.feature1)}' + f'--{features.index(feature2)}--' + f'{float(pij)}')
+            # print(cls.log)
             # feat1_dist_prob.append(dist_prob)
     
         ant_next_target_index = [key for key, value in feat1_dist_prob.items() if value == max(feat1_dist_prob.values())][0]
@@ -185,19 +186,16 @@ class Colony:
         CAUTIONS!: RUN THIS METHOD JUST ONE TIME IN EACH COLONY!
         """ 
         
-        # try:
-        #     if cls.colony_number == 0:
-        #         cls.add_generation()
-                # cls.reset_colony()
-        
-        for j in range(number_of_ants_first_generation):
+        cls.overal_ant_route = {}
+        j = 0
+        while j < number_of_ants_first_generation:
             i = 0
-            while i <= init_criteria: 
+            while i < init_criteria-1: 
                 cls.ant()
                 i += 1
             cls.overall_ant_route[j] = cls.ant_route
             cls.reset_ant_route()
-             
+            j += 1
  
         #     else:
         #         error = Exception("This is NOT first generation!")
@@ -228,7 +226,7 @@ class Colony:
         except:
             print(error)
         
-      
+ 
 # colony.reset_colony()
 # colony.ant()
 # colony.ant()
