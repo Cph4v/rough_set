@@ -120,7 +120,7 @@ class Colony:
         Colony.fg = cls.feature_choices.copy()
     
     @classmethod
-    def reset_fg(cls,j: int | None=None):
+    def reset_fg(cls, j: int | None=None):
         """
         this function reset fg that is responsible for feature space possible for each ant
         and remove first choice of each ant from this space to avoid selecting same features 
@@ -455,7 +455,7 @@ class Colony:
             j = 0
             # cls.fg = cls.feature_choices.copy()
             cls.fg = cls.feature_choices.copy()
-            cls.overall_ant_route = {}
+            # cls.overall_ant_route = {}
             first_choose = []
             while j < number_of_ants_next_generation:
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -512,7 +512,7 @@ class Colony:
         #         # cls.fg = [y for y in cls.fg if y not in [cls.fg[x] for x in first_choice_of_ants]]
         #         print(f'fg when reset in generate_next_ant: {[cls.fg.index(value) for value in cls.fg]}')
         #         cls.reset_ant_route()
-        #         j += 1
+                j += 1
             cls.change_pheromone(q=rate_decay, rho=phero_rate_decay)
         else:
             print("Colony generation doesnt initialized first!")
@@ -521,6 +521,6 @@ class Colony:
         #     print(e)}
         
 Colony.initialize_colony(number_of_ants_first_generation=5,init_criteria=4)
-Colony.generate_next_ants(number_of_ants_next_generation=5,rate_decay=0.5,phero_rate_decay=0.3, THRESHOLD=[0.9,'accuracy',0.5])
+Colony.generate_next_ants(number_of_ants_next_generation=5,rate_decay=0.5,phero_rate_decay=0.3, THRESHOLD=[0.6,'landa',0.7])
 
 print(Colony.overall_ant_route)
