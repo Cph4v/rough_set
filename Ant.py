@@ -8,6 +8,9 @@ from sklearn.model_selection import train_test_split
 from frlearn.base import probabilities_from_scores
 from sklearn.metrics import roc_auc_score
 from frlearn.neighbours.instance_preprocessors import FRPS
+import time
+from frlearn.array_functions import soft_min
+from frlearn.weights import ReciprocallyLinearWeights
 
 
 index = ["bkblk","bknwy","bkon8","bkona","bkspr","bkxbq","bkxcr","bkxwp","blxwp","bxqsq","cntxt","dsopp","dwipd",
@@ -32,23 +35,65 @@ class Ant:
         self.colony = colony
         self.fg = colony.feature_choices.copy()
         self.refrences = self.colony.feature_choices.copy()
+        self.fg_core = self.colony.feature_choices.copy()
+        self.first_choose_as_core_features = Colonies.core_feature
+        # self.fg_core = colony.fg_without_core 
 
-    def choose_feature(self) -> str:
-        feature_index = np.random.choice(range(len(self.fg)))
+    def choose_feature(self) -> None:
+        feature_value = np.random.choice(self.fg)
+        feature_index = self.refrences.index(feature_value)
         if self.refrences[feature_index] in self.fg:
             self.fg.remove(self.refrences[feature_index])
         self.ant_route.append(feature_index)
+         
         
-        
-    def choose_feature_init_with_core(self):
-        for i in Colonies.core_feature:
-            self.fg.remove(self.refrences[i])
-        self.choose_feature()
+    # def choose_feature_init_with_core(self):
+    #     if self.colony.colony_number == 0:
+    #         for _ in range(route_length):
+    #             self.choose_feature()
         
     def choose_feature_gen_with_core(self, alpha, beta):
-        for i in Colonies.core_feature:
-            self.fg.remove(self.refrences[i])
-        self.choose_feature_gen(alpha, beta)
+        """
+        This function force ants to just start from core features and then 
+        continue the path from choosing from 'fg' 
+        """
+
+        # self.fg_core = [value for value in self.refrences if self.refrences.index(value) not in Colonies.core_feature]
+        # self.choose_feature_gen(alpha, beta)
+        features = self.refrences
+        if self.ant_route == []:
+            # feature_value = np.random.choice(Colonies.core_feature)
+            feature_index = np.random.choice(self.first_choose_as_core_features)
+            self.first_choose_as_core_features = [x for x in Colonies.core_feature if x != feature_index]
+            # feature_index = self.refrences.index(feature_value)
+            # output_feature = feature_value
+            
+            # if self.refrences[feature_index] in self.fg:
+            #     self.fg.remove(self.refrences[feature_index])
+                
+            self.ant_route.append(feature_index)
+
+        else:
+            feature_index = self.ant_route[-1]
+            feature1 = self.refrences[feature_index]
+            feat1_dist_prob = {}
+            for feature2 in self.fg_core:    
+                pij = self.colony.probability_transition_rule(feature1, feature2, alpha, beta)
+                j = features.index(feature2)
+                feat1_dist_prob[j] = pij
+            keys_with_max_value = [key for key,value in feat1_dist_prob.items() if value == max(feat1_dist_prob.values())]
+            print(f'cls.fg_core in ant class: {[self.refrences.index(value) for value in self.fg_core]}')
+            if keys_with_max_value:
+                ant_next_target_index = keys_with_max_value[0]
+                Colonies.traversed_nodes[feature_index, ant_next_target_index] = 1
+                output_feature = ant_next_target_index
+                
+                if self.refrences[ant_next_target_index] in self.fg_core:
+                    self.fg_core.remove(self.refrences[ant_next_target_index])
+                
+                # self.fg.remove(self.refrences[ant_next_target_index])
+                self.ant_route.append(ant_next_target_index)
+        # return output_feature
     
     def choose_feature_gen(self, alpha, beta) -> str:
         features = self.refrences
@@ -84,42 +129,55 @@ class Ant:
                 self.ant_route.append(ant_next_target_index)
         return output_feature
 
-    def build_route_init(self, route_length: int, with_core: bool | None=None) -> None:
+    def build_route_init(self, route_length: int,
+                        #  with_core: bool | None=None
+                         ) -> None:
         if self.colony.colony_number == 0:
             for _ in range(route_length):
-                if with_core == True:
-                    self.choose_feature_init_with_core()
-                else:
-                    self.choose_feature()
+                # if with_core == True:
+                #     self.choose_feature_init_with_core()
+                # else:
+                self.choose_feature()
 
     def build_route_next_gen(self, THRESHOLD: list[int,str,None], alpha, beta, with_core: bool | None=None) -> None:
+        
+        if with_core == True:
+            for i in Colonies.core_feature:
+                if self.refrences[i] in self.fg_core:
+                    self.fg_core.remove(self.refrences[i])
+        timebase = 1000
+        start = time.time()
         k = 0
         while True:
-            
             if with_core == True:
                 self.choose_feature_gen_with_core(alpha, beta)
             else:
                 self.choose_feature_gen(alpha, beta)
-            
+                
             i = self.colony.feature_choices.copy()
             if THRESHOLD[1] == 'accuracy':
-                is_criteria_met, criteria = self.colony.is_rough_set_criteria_met(self.ant_route ,THRESHOLD[0])
+                is_criteria_met, criteria = self.colony.is_rough_set_criteria_met(self.ant_route ,THRESHOLD[0], with_core)
             if THRESHOLD[1] == 'landa':
-                # is_criteria_met, criteria = self.colony.is_landa_met(self.ant_route , THRESHOLD[2], THRESHOLD[0])
-                is_criteria_met, criteria = self.colony.is_landa_met(self.ant_route , THRESHOLD[0])
-
+                is_criteria_met, criteria = self.colony.is_landa_met(self.ant_route , THRESHOLD[0], with_core)
+            stop = time.time()
+            thresh = abs(stop - start)
             if is_criteria_met:
                 print(f'Ant-gen: {k} stop with this criteria {criteria}\n'
                         f'with this ant_route{self.ant_route}\n')
                 print(f'self.colony.fg: {[self.refrences.index(x) for x in self.fg]}')
                 # self.ant_route = []
                 break
-            elif not is_criteria_met and self.fg == []:
+            # elif (not is_criteria_met and self.fg == []) or (thresh > 350):
+            elif (self.fg_core == [] or self.fg == []) or (thresh > 350):
                 print(f'ant couldnt find route with {criteria} accuracy')
+                print(f'time_per_thesh: {thresh}')
                 # self.ant_route = []
                 break
             k += 1
-        
+        stop = time.time()
+        thresh = abs(stop - start)
+        time_per_iteration = thresh/timebase
+        # print(f'time_per_iteration: {time_per_iteration}')
         
 class Colonies:
     
@@ -129,6 +187,7 @@ class Colonies:
     overall_ant_route_init: dict = {}
     delta = np.zeros((ns.shape[1],ns.shape[1]))
     core_feature: list[int] | None=None
+    
     
     
 class Colony:
@@ -143,7 +202,9 @@ class Colony:
     acc_criteria: float
     rho: int | float
     colony_number: int = 0
-
+    fg_without_core: list[str] | None=None
+    
+    
     @classmethod
     def set_stopping_criteria(cls, criteria):
         cls.acc_criteria = criteria
@@ -299,36 +360,51 @@ class Colony:
                           q: float | None=None,
                           phero_rate_decay: float | None=None,
                           make_change_pheromone: bool | None=None,
-                          with_core: bool | None=None):
+                          with_core: bool | None=None,
+                          core_accuracy: float | int | None=None
+                          ):
         
         # self.overall_ant_route_init = {}
+        # if with_core == True:
+        #     cls.find_core_feature()
         if with_core == True:
-            cls.find_core_feature()
-            
+            cls.find_core_feature(core_accuracy)
         first_choose = []
         for i in range(number_of_ants_first_generation):
             ant_instance = Ant(cls)
-            if with_core == True:
-                ant_instance.choose_feature_init_with_core()
-            else:    
-                ant_instance.build_route_init(init_criteria)
+            # if with_core == True:
+            #     ant_instance.choose_feature_init_with_core()
+            # else:    
+            ant_instance.build_route_init(init_criteria)
             Colonies.overall_ant_route_init[i] = ant_instance.ant_route
             first_choose.append(ant_instance.ant_route[0])    
             cls.log[i] = ant_instance.ant_route
-            if make_change_pheromone == True:
-                cls.change_pheromone(q=q, rho=phero_rate_decay)
            
             print(f'ant_route: {ant_instance.ant_route}')
             print(f'ant_instance.fg: {[cls.feature_choices.index(x) for x in ant_instance.fg]}')
+        if make_change_pheromone == True:
+            cls.change_pheromone(q=q, rho=phero_rate_decay)
         cls.add_generation()
-        print(f'initiall final: {[cls.feature_choices.index(x) for x in cls.fg]}')
+        print(f'initiall final: {[cls.feature_choices.index(x) for x in ant_instance.fg]}')
         print('#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#')
 
     @classmethod
-    def is_rough_set_criteria_met(cls, selected_feature: list[int], acc_criteria: float | int):
+    def is_rough_set_criteria_met(cls, selected_feature: list[int],
+                                  acc_criteria: float | int,
+                                  with_core: bool | None=None):
+        
         cls.set_stopping_criteria(acc_criteria)
-        if selected_feature != [] and len(selected_feature) > 1:
-            data = ns.iloc[:, selected_feature]
+        # this [1:] is just for avoid conclude core feature in metrics because
+        # core feature overfit metrics and pass them easily.and core feature
+        # located at first index of ant_route.
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if with_core:
+            selected_feat = selected_feature[1:]
+        else:
+            selected_feat = selected_feature
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if selected_feat != [] and len(selected_feat) > 1:
+            data = ns.iloc[:, selected_feat]
             X_train, X_test, y_train, y_test = train_test_split(data.values, Y.values.squeeze(), test_size=0.33, random_state=42)
             clf = FRNN()
             model = clf(X_train, y_train)
@@ -343,26 +419,65 @@ class Colony:
                 return False, auroc
         else:
             return False, 0.0
-
+    
+    
+    
+    @classmethod
+    def lower(cls, Cs, co_Cs):
+        owa_weights: ReciprocallyLinearWeights()
+        aggr_R = np.mean
+        return np.concatenate([soft_min(
+            aggr_R(np.abs(C[:, None, :] - co_C), axis=-1),
+            owa_weights, k=None, axis=-1
+        ) for C, co_C in zip(Cs, co_Cs)], axis=0)
         
     @classmethod
     def is_landa_met(
-        cls, selected_feature: list[int], landa_criteria):
+        cls, selected_feature: list[int], landa_criteria, with_core):
         """
         sim_threshold: similarity of each pair of instances that more than that
-        these pairs trace as Similar together
+        these pairs trace as Similar together.
         landa_criteria: stop one ant route exploration if met.more landa equall less redundant.  
         """
-        if selected_feature != [] and len(selected_feature) > 1:
+        
+        # this [1:] is just for dont conclude core feature in metrics because
+        # core feature overfit metrics and pass them easily.and core feature
+        # located at first index of ant_route
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if with_core:
+            selected_feat = selected_feature[1:]
+        else:
+            selected_feat = selected_feature
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+        selected_feat = selected_feature   
+        if selected_feat != []:
             X = ns.iloc[:, selected_feature].values
             y = Y.values.squeeze()
-            clf = FRPS()
-            ## FRPS() choose instances that are not ROUGH!
-            ## instances with quality measure more than maximum tau
-            selected_dataset,_ = clf(X, y)
-            criteria = len(selected_dataset)/len(X)
+            ## use knn as classifier 
+            #~~~~~~~~~~~~~~~~~~~~~~~~~
+            # classes = np.unique(y)
+            # Cs = [X[np.where(y == c)] for c in classes]
+            # X_unscaled = np.concatenate(Cs, axis=0)
+            # scale = np.amax(X_unscaled, axis=0) - np.amin(X_unscaled, axis=0)
+            # scale = np.where(scale == 0, 1, scale)
+            # X = X_unscaled/scale
+            # Cs = [C/scale for C in Cs]
+            # co_Cs = [X[np.where(y != c)] for c in classes]
+            # Q = cls.lower(Cs, co_Cs)
+            # lower_approximation = Q
+            # data = lower_approximation
+            # Q1 = np.percentile(data, 25)
+            # Q3 = np.percentile(data, 75)
+            # in_range = ((data >= Q1) & (data <= Q3))
+            # count = np.count_nonzero(in_range)
+            #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            frps_instance = FRPS()
+            X_new, y_new = frps_instance(X, y)
+            count = len(X_new)
+
+            criteria = count/len(ns)
             landa = criteria
-            cls.log['landa'] = landa
+            cls.log[f'landa: {selected_feature[-1]}'] = landa
             if landa >= landa_criteria:
                 return True, landa
             elif landa < landa_criteria:
@@ -372,7 +487,14 @@ class Colony:
             return False, landa
         
     @classmethod
-    def find_core_feature(cls):
+    def find_core_feature(cls, accurate_more_than = 0.75):
+        """
+        :ivar accurate_more_than: features that results in accuracy more than 
+        this variable will save as core features that have huge impact on 
+        accuracy of an ant_route and if we remove it from route choices of each ant
+        and force ants to choose one of them as their first choice we can look 
+        more clearly at other features.
+        """
         Colonies.core_feature = []
         y = Y.values.squeeze()  
         clf = FRPS()  
@@ -381,9 +503,16 @@ class Colony:
             ## instances with quality measure more than maximum tau
             X = ns.iloc[:, [feature_index]].values
             selected_dataset = clf(X, y)
-            if (len(selected_dataset)/len(X)) >= 0.5:
+            if (len(selected_dataset[0])/len(X)) >= accurate_more_than:
                 Colonies.core_feature.append(feature_index)
                 print(feature_index)
+        print(Colonies.core_feature)
+        
+        # for i in Colonies.core_feature:
+        #     if cls.feature_choices[i]:
+        #         copy = cls.feature_choices
+        #         Colonies.fg_without_core = copy.remove(cls.feature_choices[i])
+
         return Colonies.core_feature
 
     @classmethod 
@@ -394,7 +523,8 @@ class Colony:
         THRESHOLD: list[int,str,None],
         alpha,
         beta,
-        with_core: bool | None=None
+        with_core: bool | None=None,
+        change_pheromone: bool = True
         ):
         """
         :ivar THRESHOLD[0]: criteria or limit for accuracy or landa
@@ -415,25 +545,25 @@ class Colony:
         if cls.colony_number > 0:
             j = 0
             first_choose = []
-            if with_core == True:
-                cls.find_core_feature()
+            # if with_core == True:
+            #     cls.find_core_feature()
             while j < number_of_ants_next_generation:
                 next_ant = Ant(cls)
-                if with_core == True:
-                    next_ant.choose_feature_gen_with_core()
-                else:
-                    next_ant.build_route_next_gen(THRESHOLD, alpha, beta, with_core)
+                # if with_core == True:
+                #     next_ant.choose_feature_gen_with_core(alpha, beta)
+                # else:
+                next_ant.build_route_next_gen(THRESHOLD, alpha, beta, with_core)
                 Colonies.overall_ant_route[f'Colony Number:{cls.colony_number} ant-num:{j}'] = next_ant.ant_route
                 cls.log[j] = next_ant.ant_route
                 print(f'ant_route: {next_ant.ant_route}')
                 j += 1
-            cls.change_pheromone(q=q, rho=phero_rate_decay)
+            if change_pheromone:
+                cls.change_pheromone(q=q, rho=phero_rate_decay)
         else:
             print("Colony generation doesnt initialized first!") 
 
 
-output = Colony.find_core_feature()
-print(output)
+
 # Colony.initialize_colony(number_of_ants_first_generation=5,
 #                          init_criteria=3,
 #                          q=0.9,
@@ -447,5 +577,6 @@ print(output)
 #                           THRESHOLD=[0.97, 'landa', 0.80],
 #                           alpha=0.8,
 #                           beta=0.2,
+
 #                           with_core=True)
 # print(Colonies.overall_ant_route)
