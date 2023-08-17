@@ -37,6 +37,7 @@ class Ant:
         self.refrences = self.colony.feature_choices.copy()
         self.fg_core = self.colony.feature_choices.copy()
         self.first_choose_as_core_features = Colonies.core_feature
+        self.colonies_instance = Colonies()
         # self.fg_core = colony.fg_without_core 
 
     def choose_feature(self) -> None:
@@ -82,7 +83,7 @@ class Ant:
                 j = features.index(feature2)
                 feat1_dist_prob[j] = pij
             keys_with_max_value = [key for key,value in feat1_dist_prob.items() if value == max(feat1_dist_prob.values())]
-            print(f'cls.fg_core in ant class: {[self.refrences.index(value) for value in self.fg_core]}')
+            print(f'self.fg_core in ant class: {[self.refrences.index(value) for value in self.fg_core]}')
             if keys_with_max_value:
                 ant_next_target_index = keys_with_max_value[0]
                 Colonies.traversed_nodes[feature_index, ant_next_target_index] = 1
@@ -116,7 +117,7 @@ class Ant:
                 j = features.index(feature2)
                 feat1_dist_prob[j] = pij
             keys_with_max_value = [key for key,value in feat1_dist_prob.items() if value == max(feat1_dist_prob.values())]
-            print(f'cls.fg in ant class: {[self.refrences.index(value) for value in self.fg]}')
+            print(f'self.fg in ant class: {[self.refrences.index(value) for value in self.fg]}')
             if keys_with_max_value:
                 ant_next_target_index = keys_with_max_value[0]
                 Colonies.traversed_nodes[feature_index, ant_next_target_index] = 1
@@ -181,6 +182,11 @@ class Ant:
         
 class Colonies:
     
+    def __init__(self):
+        self.log_pheromone = {}
+        self.log_traversed_nodes = {}
+        self.log_overall_ant_route = {}
+    
     pheromone = np.ones((ns.shape[1], ns.shape[1]))
     traversed_nodes = np.zeros((ns.shape[1],ns.shape[1]))
     overall_ant_route: dict = {}
@@ -192,46 +198,72 @@ class Colonies:
     
 class Colony:
     
-    dataframe: object = ns
-    alpha: float | int 
-    beta: float | int 
-    feature_choices = dataframe.columns.tolist()
-    feature1: str
-    log: dict = {}
-    fg = dataframe.columns.tolist() 
-    acc_criteria: float
-    rho: int | float
-    colony_number: int = 0
-    fg_without_core: list[str] | None=None
+    # dataframe: object = ns
+    # alpha: float | int 
+    # beta: float | int 
+    # feature_choices = dataframe.columns.tolist()
+    # feature1: str
+    # log: dict = {}
+    # fg = dataframe.columns.tolist() 
+    # acc_criteria: float
+    # rho: int | float
+    # colony_number: int = 0
+    # fg_without_core: list[str] | None=None
     
+    def __init__(self):
+        self.dataframe: object = ns
+        self.alpha: float | int 
+        self.beta: float | int 
+        self.feature_choices = self.dataframe.columns.tolist()
+        self.feature1: str
+        self.log: dict = {}
+        self.fg = self.dataframe.columns.tolist() 
+        self.acc_criteria: float
+        self.rho: int | float
+        self.colony_number: int = 0
+        self.fg_without_core: list[str] | None=None
+        self.colonies_instance = Colonies()
+        
     
-    @classmethod
-    def set_stopping_criteria(cls, criteria):
-        cls.acc_criteria = criteria
+
+    def set_stopping_criteria(self, criteria):
+        self.acc_criteria = criteria
     
-    @classmethod
-    def set_rate_decay(cls, rate_decay):
-        cls.rho = rate_decay
+
+    def set_rate_decay(self, rate_decay):
+        self.rho = rate_decay
     
-    @classmethod
-    def add_generation(cls):
-        cls.colony_number += 1
+
+    def add_generation(self):
+        self.colony_number += 1
 
     
-    @classmethod
-    def get_log(cls):
-        print(cls.log)
+
+    def get_log(self):
+        if Colonies.overall_ant_route:
+            self.colonies_instance.log_overall_ant_route[f"{self.__class__.__name__}-gen"] = Colonies.overall_ant_route
+        if Colonies.overall_ant_route_init:
+            self.colonies_instance.log_overall_ant_route[f"{self.__class__.__name__}-init"] = Colonies.overall_ant_route_init
+        # if Colonies.pheromone.any() != 1:
+        self.colonies_instance.log_pheromone[f"{self.__class__.__name__}-pheromone"] = Colonies.pheromone
+        if Colonies.traversed_nodes.any() == 1:
+            self.colonies_instance.log_traversed_nodes[f"{self.__class__.__name__}-node"] = Colonies.traversed_nodes
+        self.log[f'{self.colony_number} - overall_ant_route_init'] = Colonies.overall_ant_route_init
+        self.log[f'{self.colony_number} - overall_ant_route'] = Colonies.overall_ant_route
+        self.log[f'{self.colony_number} pheromone'] = Colonies.pheromone
+        self.log[f'{self.colony_number} - traversed_nodes'] = Colonies.traversed_nodes
+        # print(self.log)
     
-    @classmethod
-    def reset_colony(cls):
+
+    def reset_colony(self):
         Colony.pheromone = np.ones((ns.shape[1], ns.shape[1]))
         Colony.traversed_nodes = np.zeros((ns.shape[1], ns.shape[1]))
         Colony.overall_ant_route = {}
         Colony.log = []
-        Colony.fg = cls.feature_choices.copy()
+        Colony.fg = self.feature_choices.copy()
     
-    @classmethod
-    def reset_fg(cls, j: int | None=None):
+
+    def reset_fg(self, j: int | None=None):
         """
         this function reset fg that is responsible for feature space possible for each ant
         and remove first choice of each ant from this space to avoid selecting same features 
@@ -241,59 +273,58 @@ class Colony:
         and each ant beging from different node as begining.
         """
         
-        first_choice_of_ants = [x[0] for x in list(cls.overall_ant_route.values())]
+        first_choice_of_ants = [x[0] for x in list(self.overall_ant_route.values())]
         print(f'first_choice_of_ants: {first_choice_of_ants}')
-        str_of_first_choice = [cls.feature_choices[l] for l in first_choice_of_ants[j:]]
+        str_of_first_choice = [self.feature_choices[l] for l in first_choice_of_ants[j:]]
         print(f'str_of_first_choice: {str_of_first_choice}')
-        cls.fg = cls.feature_choices
+        self.fg = self.feature_choices
         for y in str_of_first_choice: 
-            if y in cls.fg:
-                cls.fg.remove(y)
+            if y in self.fg:
+                self.fg.remove(y)
         for x in first_choice_of_ants:
-            cls.feature_choices[x]
+            self.feature_choices[x]
         
-    @classmethod
-    def initialization_alpha_beta(cls, alpha, beta):
-        
-        cls.alpha = alpha
-        cls.beta = beta
 
-    @classmethod
-    def reset_ant_route(cls):
-        cls.ant_route = []
+    def initialization_alpha_beta(self, alpha, beta):
+        self.alpha = alpha
+        self.beta = beta
 
-    @classmethod
-    def initialize_feature1(cls):
-        ant_route = cls.ant_route
+
+    def reset_ant_route(self):
+        self.ant_route = []
+
+
+    def initialize_feature1(self):
+        ant_route = self.ant_route
         if ant_route == []:
-            cls.feature1 = np.random.choice(cls.feature_choices.copy())
+            self.feature1 = np.random.choice(self.feature_choices.copy())
         else:
-            cls.feature1 = cls.feature_choices[cls.ant_route[-1]]
+            self.feature1 = self.feature_choices[self.ant_route[-1]]
 
 
     
-    @classmethod
+
     def ants(
-        cls, make_initialize: bool | None=None,
+        self, make_initialize: bool | None=None,
             number_of_ants_first_gen: int | None=None,
             number_of_ants_next_gen: int | None=None, 
             init_criteria: int | str | None=None,
             rate_decay: float | None=None, 
             phero_rate_decay: float | None=None):
 
-        if cls.colony_number == 0 or make_initialize == True:
-            cls.initialize_colony(
+        if self.colony_number == 0 or make_initialize == True:
+            self.initialize_colony(
                 number_of_ants_first_generation=number_of_ants_first_gen,
                                 init_criteria=init_criteria)
-            cls.generate_next_ants(
+            self.generate_next_ants(
                 number_of_ants_next_generation=number_of_ants_next_gen,
                 rate_decay=rate_decay, phero_rate_decay=phero_rate_decay,
-                criteria_func=cls.is_rough_set_criteria_met)
+                criteria_func=self.is_rough_set_criteria_met)
             
 
         
-    @classmethod
-    def change_pheromone(cls, q, rho):
+
+    def change_pheromone(self, q, rho):
         """
         After each generation of several ants or after each generation 
         it update pheromone matrix according to following formula:
@@ -308,22 +339,22 @@ class Colony:
                        |_| = 0                                            ,if traversed_node[i,j] = 0
         landa_prime is rough_set_measure           
         """
-        cls.set_rate_decay(rho)
+        self.set_rate_decay(rho)
         minimum_ant_route_len = np.min([len(x) for x in list(Colonies.overall_ant_route.values())])
         for i in range(Colonies.delta.shape[0]):
             for j in range(Colonies.delta.shape[0]):
                 if Colonies.traversed_nodes[i,j] == 1:
                     Colonies.delta[i,j] = q/minimum_ant_route_len
-                    Colonies.pheromone[i,j] = (1 - cls.rho)*Colonies.pheromone[i,j] + Colonies.delta[i,j]
+                    Colonies.pheromone[i,j] = (1 - self.rho)*Colonies.pheromone[i,j] + Colonies.delta[i,j]
                 elif Colonies.traversed_nodes[i,j] == 0:
                     Colonies.delta[i,j] = 0
-                    Colonies.pheromone[i,j] = (1 - cls.rho)*Colonies.pheromone[i,j] + Colonies.delta[i,j]
+                    Colonies.pheromone[i,j] = (1 - self.rho)*Colonies.pheromone[i,j] + Colonies.delta[i,j]
         
 
-    @classmethod
-    def positive_region(cls):
 
-        df = cls.dataframe
+    def positive_region(self):
+
+        df = self.dataframe
         partitions = [group for _, group in df.groupby(df.iloc[:-1])]
     
         # find positive region for each partition
@@ -332,8 +363,8 @@ class Colony:
         # return union of all positive regions
         return pd.concat(positive_regions)
     
-    @classmethod
-    def probability_transition_rule(cls, feature1, feature2, alpha, beta):
+
+    def probability_transition_rule(self, feature1, feature2, alpha, beta):
         col_index = ns.columns.tolist()
         i = col_index.index(feature1)
         j = col_index.index(feature2)
@@ -353,8 +384,8 @@ class Colony:
         pij = ((mic_ij**beta) * (phrmn_ij**alpha)) / init
         return pij
 
-    @classmethod
-    def initialize_colony(cls,
+
+    def initialize_colony(self,
                           number_of_ants_first_generation,
                           init_criteria,
                           q: float | None=None,
@@ -366,34 +397,35 @@ class Colony:
         
         # self.overall_ant_route_init = {}
         # if with_core == True:
-        #     cls.find_core_feature()
+        #     self.find_core_feature()
         if with_core == True:
-            cls.find_core_feature(core_accuracy)
+            self.find_core_feature(core_accuracy)
         first_choose = []
         for i in range(number_of_ants_first_generation):
-            ant_instance = Ant(cls)
+            ant_instance = Ant(self)
             # if with_core == True:
             #     ant_instance.choose_feature_init_with_core()
             # else:    
             ant_instance.build_route_init(init_criteria)
             Colonies.overall_ant_route_init[i] = ant_instance.ant_route
             first_choose.append(ant_instance.ant_route[0])    
-            cls.log[i] = ant_instance.ant_route
+            self.log[i] = ant_instance.ant_route
            
             print(f'ant_route: {ant_instance.ant_route}')
-            print(f'ant_instance.fg: {[cls.feature_choices.index(x) for x in ant_instance.fg]}')
+            print(f'ant_instance.fg: {[self.feature_choices.index(x) for x in ant_instance.fg]}')
         if make_change_pheromone == True:
-            cls.change_pheromone(q=q, rho=phero_rate_decay)
-        cls.add_generation()
-        print(f'initiall final: {[cls.feature_choices.index(x) for x in ant_instance.fg]}')
+            self.change_pheromone(q=q, rho=phero_rate_decay)
+        self.add_generation()
+        self.get_log()
+        print(f'initiall final: {[self.feature_choices.index(x) for x in ant_instance.fg]}')
         print('#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#')
 
-    @classmethod
-    def is_rough_set_criteria_met(cls, selected_feature: list[int],
+
+    def is_rough_set_criteria_met(self, selected_feature: list[int],
                                   acc_criteria: float | int,
                                   with_core: bool | None=None):
         
-        cls.set_stopping_criteria(acc_criteria)
+        self.set_stopping_criteria(acc_criteria)
         # this [1:] is just for avoid conclude core feature in metrics because
         # core feature overfit metrics and pass them easily.and core feature
         # located at first index of ant_route.
@@ -412,8 +444,8 @@ class Colony:
             probabilities = probabilities_from_scores(scores)
             auroc = roc_auc_score(y_test, probabilities[:,-1])
             
-            if auroc >= cls.acc_criteria:
-                cls.log['acc'] = auroc
+            if auroc >= self.acc_criteria:
+                self.log['acc'] = auroc
                 return True, auroc
             else:
                 return False, auroc
@@ -422,8 +454,8 @@ class Colony:
     
     
     
-    @classmethod
-    def lower(cls, Cs, co_Cs):
+
+    def lower(self, Cs, co_Cs):
         owa_weights: ReciprocallyLinearWeights()
         aggr_R = np.mean
         return np.concatenate([soft_min(
@@ -431,9 +463,9 @@ class Colony:
             owa_weights, k=None, axis=-1
         ) for C, co_C in zip(Cs, co_Cs)], axis=0)
         
-    @classmethod
+
     def is_landa_met(
-        cls, selected_feature: list[int], landa_criteria, with_core):
+        self, selected_feature: list[int], landa_criteria, with_core):
         """
         sim_threshold: similarity of each pair of instances that more than that
         these pairs trace as Similar together.
@@ -463,7 +495,7 @@ class Colony:
             # X = X_unscaled/scale
             # Cs = [C/scale for C in Cs]
             # co_Cs = [X[np.where(y != c)] for c in classes]
-            # Q = cls.lower(Cs, co_Cs)
+            # Q = self.lower(Cs, co_Cs)
             # lower_approximation = Q
             # data = lower_approximation
             # Q1 = np.percentile(data, 25)
@@ -477,7 +509,7 @@ class Colony:
 
             criteria = count/len(ns)
             landa = criteria
-            cls.log[f'landa: {selected_feature[-1]}'] = landa
+            self.log[f'landa: {selected_feature[-1]}'] = landa
             if landa >= landa_criteria:
                 return True, landa
             elif landa < landa_criteria:
@@ -486,8 +518,8 @@ class Colony:
             landa = 0.0
             return False, landa
         
-    @classmethod
-    def find_core_feature(cls, accurate_more_than = 0.75):
+
+    def find_core_feature(self, accurate_more_than = 0.75):
         """
         :ivar accurate_more_than: features that results in accuracy more than 
         this variable will save as core features that have huge impact on 
@@ -498,7 +530,7 @@ class Colony:
         Colonies.core_feature = []
         y = Y.values.squeeze()  
         clf = FRPS()  
-        for feature_index in range(len(cls.feature_choices)):
+        for feature_index in range(len(self.feature_choices)):
             ## FRPS() choose instances that are not ROUGH!
             ## instances with quality measure more than maximum tau
             X = ns.iloc[:, [feature_index]].values
@@ -509,15 +541,15 @@ class Colony:
         print(Colonies.core_feature)
         
         # for i in Colonies.core_feature:
-        #     if cls.feature_choices[i]:
-        #         copy = cls.feature_choices
-        #         Colonies.fg_without_core = copy.remove(cls.feature_choices[i])
+        #     if self.feature_choices[i]:
+        #         copy = self.feature_choices
+        #         Colonies.fg_without_core = copy.remove(self.feature_choices[i])
 
         return Colonies.core_feature
 
-    @classmethod 
+ 
     def generate_next_ants(
-        cls, number_of_ants_next_generation: int,
+        self, number_of_ants_next_generation: int,
         q,
         phero_rate_decay,
         THRESHOLD: list[int,str,None],
@@ -541,24 +573,25 @@ class Colony:
         if it was equall landa then criteria limit = [0,1] AND THRESHOLD[2]
         must be enter
         """
-        cls.add_generation()
-        if cls.colony_number > 0:
+        self.add_generation()
+        if self.colony_number > 0:
             j = 0
             first_choose = []
             # if with_core == True:
-            #     cls.find_core_feature()
+            #     self.find_core_feature()
             while j < number_of_ants_next_generation:
-                next_ant = Ant(cls)
+                next_ant = Ant(self)
                 # if with_core == True:
                 #     next_ant.choose_feature_gen_with_core(alpha, beta)
                 # else:
                 next_ant.build_route_next_gen(THRESHOLD, alpha, beta, with_core)
-                Colonies.overall_ant_route[f'Colony Number:{cls.colony_number} ant-num:{j}'] = next_ant.ant_route
-                cls.log[j] = next_ant.ant_route
+                Colonies.overall_ant_route[f'Colony Number:{self.colony_number} ant-num:{j}'] = next_ant.ant_route
+                self.log[j] = next_ant.ant_route
                 print(f'ant_route: {next_ant.ant_route}')
                 j += 1
             if change_pheromone:
-                cls.change_pheromone(q=q, rho=phero_rate_decay)
+                self.change_pheromone(q=q, rho=phero_rate_decay)
+            self.get_log()
         else:
             print("Colony generation doesnt initialized first!") 
 
