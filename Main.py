@@ -140,7 +140,7 @@ class Ant:
                 # else:
                 self.choose_feature()
 
-    def build_route_next_gen(self, THRESHOLD: list[int,str,None], alpha, beta, with_core: bool | None=None) -> None:
+    def build_route_next_gen(self, THRESHOLD, alpha, beta, with_core: bool | None=None) -> None:
         
         if with_core == True:
             for i in Colonies.core_feature:
@@ -186,13 +186,15 @@ class Colonies:
         self.log_pheromone = {}
         self.log_traversed_nodes = {}
         self.log_overall_ant_route = {}
-    
+        self.colony_number: int = 0
+            
     pheromone = np.ones((ns.shape[1], ns.shape[1]))
     traversed_nodes = np.zeros((ns.shape[1],ns.shape[1]))
     overall_ant_route: dict = {}
     overall_ant_route_init: dict = {}
     delta = np.zeros((ns.shape[1],ns.shape[1]))
-    core_feature: list[int] | None=None
+    core_feature: list[int] | None = None
+    colony_number: int = 0
     
     
     
@@ -220,12 +222,18 @@ class Colony:
         self.fg = self.dataframe.columns.tolist() 
         self.acc_criteria: float
         self.rho: int | float
-        self.colony_number: int = 0
         self.fg_without_core: list[str] | None=None
         self.colonies_instance = Colonies()
+        self.phero = {}
+        self.overall_route = {}
+        self.generation_number: int = 0
+        self.colony_number: int = 0
         
-    
-
+    def set_phero_and_route(self):
+        self.phero = Colonies.pheromone     
+        self.overall_route['initial'] = Colonies.overall_ant_route_init
+        self.overall_route['generation'] = Colonies.overall_ant_route
+        
     def set_stopping_criteria(self, criteria):
         self.acc_criteria = criteria
     
@@ -234,25 +242,13 @@ class Colony:
         self.rho = rate_decay
     
 
-    def add_generation(self):
-        self.colony_number += 1
-
-    
-
-    def get_log(self):
-        if Colonies.overall_ant_route:
-            self.colonies_instance.log_overall_ant_route[f"{self.__class__.__name__}-gen"] = Colonies.overall_ant_route
-        if Colonies.overall_ant_route_init:
-            self.colonies_instance.log_overall_ant_route[f"{self.__class__.__name__}-init"] = Colonies.overall_ant_route_init
-        # if Colonies.pheromone.any() != 1:
-        self.colonies_instance.log_pheromone[f"{self.__class__.__name__}-pheromone"] = Colonies.pheromone
-        if Colonies.traversed_nodes.any() == 1:
-            self.colonies_instance.log_traversed_nodes[f"{self.__class__.__name__}-node"] = Colonies.traversed_nodes
-        self.log[f'{self.colony_number} - overall_ant_route_init'] = Colonies.overall_ant_route_init
-        self.log[f'{self.colony_number} - overall_ant_route'] = Colonies.overall_ant_route
-        self.log[f'{self.colony_number} pheromone'] = Colonies.pheromone
-        self.log[f'{self.colony_number} - traversed_nodes'] = Colonies.traversed_nodes
-        # print(self.log)
+    def add_colony_number(self):
+        colonies = Colonies()
+        colonies.colony_number += 1
+        Colonies.colony_number += 1 
+        
+    def add_generation_number(self):
+        self.generation_number += 1
     
 
     def reset_colony(self):
@@ -304,22 +300,46 @@ class Colony:
 
     
 
-    def ants(
-        self, make_initialize: bool | None=None,
-            number_of_ants_first_gen: int | None=None,
-            number_of_ants_next_gen: int | None=None, 
-            init_criteria: int | str | None=None,
-            rate_decay: float | None=None, 
-            phero_rate_decay: float | None=None):
-
+    def generation(
+        self, make_initialize: bool | None = None,
+        number_of_ants_first_gen: int | None = None,
+        number_of_ants_next_gen: int | None = None, 
+        init_criteria: int | str | None = None,
+        rate_decay: float | None = None, 
+        phero_rate_decay: float | None = None,
+        make_change_pheromone_init: bool | None = None,
+        make_change_pheromone_gen: bool | None = None,
+        with_core: bool | None = None,
+        core_accuracy: float | None = None,
+        q_in_init: float | None = None,
+        q_in_gen: float | None = None,
+        THRESHOLD: list[int,str,None] | None = None,
+        alpha: float | int | None = None,
+        beta: float | int | None = None,
+        number_of_generations: int | None = None
+        ) -> None:
+        
         if self.colony_number == 0 or make_initialize == True:
             self.initialize_colony(
                 number_of_ants_first_generation=number_of_ants_first_gen,
-                                init_criteria=init_criteria)
+                init_criteria=init_criteria,
+                q=q_in_init,
+                phero_rate_decay=phero_rate_decay,
+                make_change_pheromone=make_change_pheromone_init,
+                with_core=with_core,
+                core_accuracy=core_accuracy
+                )
+        for i in range(0,number_of_generations):
             self.generate_next_ants(
                 number_of_ants_next_generation=number_of_ants_next_gen,
-                rate_decay=rate_decay, phero_rate_decay=phero_rate_decay,
-                criteria_func=self.is_rough_set_criteria_met)
+                q=q_in_gen,
+                phero_rate_decay=phero_rate_decay,
+                THRESHOLD=THRESHOLD,
+                alpha=alpha,
+                beta=beta,
+                with_core=with_core,
+                change_pheromone=make_change_pheromone_gen
+                )
             
 
         
@@ -385,38 +405,32 @@ class Colony:
         return pij
 
 
-    def initialize_colony(self,
-                          number_of_ants_first_generation,
-                          init_criteria,
-                          q: float | None=None,
-                          phero_rate_decay: float | None=None,
-                          make_change_pheromone: bool | None=None,
-                          with_core: bool | None=None,
-                          core_accuracy: float | int | None=None
-                          ):
+    def initialize_colony(
+            self, number_of_ants_first_generation, init_criteria,
+            q: float | None = None,
+            phero_rate_decay: float | None = None,
+            make_change_pheromone: bool | None = None,
+            with_core: bool | None = None,
+            core_accuracy: None = None 
+            ) -> None:
         
-        # self.overall_ant_route_init = {}
-        # if with_core == True:
-        #     self.find_core_feature()
-        if with_core == True:
+        overall_ant_route_init = {}
+        if with_core is True:
             self.find_core_feature(core_accuracy)
         first_choose = []
         for i in range(number_of_ants_first_generation):
             ant_instance = Ant(self)
-            # if with_core == True:
-            #     ant_instance.choose_feature_init_with_core()
-            # else:    
             ant_instance.build_route_init(init_criteria)
             Colonies.overall_ant_route_init[i] = ant_instance.ant_route
             first_choose.append(ant_instance.ant_route[0])    
-            self.log[i] = ant_instance.ant_route
-           
+            overall_ant_route_init[f'ant_init:{i}'] = ant_instance.ant_route
             print(f'ant_route: {ant_instance.ant_route}')
             print(f'ant_instance.fg: {[self.feature_choices.index(x) for x in ant_instance.fg]}')
         if make_change_pheromone == True:
             self.change_pheromone(q=q, rho=phero_rate_decay)
-        self.add_generation()
-        self.get_log()
+            self.phero[f'colony_number -> {self.colonies_instance.colony_number}| initialization_step'] = f'pheromone -> {Colonies.pheromone}'
+        self.add_colony_number()
+        self.overall_route[f'colony_number -> {self.colonies_instance.colony_number}| initialization_step'] = f'overall_ant_route_init -> {overall_ant_route_init}'
         print(f'initiall final: {[self.feature_choices.index(x) for x in ant_instance.fg]}')
         print('#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#')
 
@@ -460,8 +474,8 @@ class Colony:
         aggr_R = np.mean
         return np.concatenate([soft_min(
             aggr_R(np.abs(C[:, None, :] - co_C), axis=-1),
-            owa_weights, k=None, axis=-1
-        ) for C, co_C in zip(Cs, co_Cs)], axis=0)
+            owa_weights, k=None, axis=-1) for C, co_C in zip(Cs, co_Cs)],
+            axis=0)
         
 
     def is_landa_met(
@@ -519,7 +533,7 @@ class Colony:
             return False, landa
         
 
-    def find_core_feature(self, accurate_more_than = 0.75):
+    def find_core_feature(self, accurate_more_than: None = 0.75):
         """
         :ivar accurate_more_than: features that results in accuracy more than 
         this variable will save as core features that have huge impact on 
@@ -531,33 +545,25 @@ class Colony:
         y = Y.values.squeeze()  
         clf = FRPS()  
         for feature_index in range(len(self.feature_choices)):
-            ## FRPS() choose instances that are not ROUGH!
-            ## instances with quality measure more than maximum tau
             X = ns.iloc[:, [feature_index]].values
             selected_dataset = clf(X, y)
             if (len(selected_dataset[0])/len(X)) >= accurate_more_than:
                 Colonies.core_feature.append(feature_index)
                 print(feature_index)
         print(Colonies.core_feature)
-        
-        # for i in Colonies.core_feature:
-        #     if self.feature_choices[i]:
-        #         copy = self.feature_choices
-        #         Colonies.fg_without_core = copy.remove(self.feature_choices[i])
-
         return Colonies.core_feature
 
  
     def generate_next_ants(
-        self, number_of_ants_next_generation: int,
-        q,
-        phero_rate_decay,
-        THRESHOLD: list[int,str,None],
-        alpha,
-        beta,
-        with_core: bool | None=None,
-        change_pheromone: bool = True
-        ):
+            self, number_of_ants_next_generation: int,
+            q,
+            phero_rate_decay,
+            THRESHOLD,
+            alpha,
+            beta,
+            with_core: bool | None = None,
+            change_pheromone: bool = True
+            ):
         """
         :ivar THRESHOLD[0]: criteria or limit for accuracy or landa
         :ivar THRESHOLD[1]: 'accuracy' or 'landa' 
@@ -573,43 +579,20 @@ class Colony:
         if it was equall landa then criteria limit = [0,1] AND THRESHOLD[2]
         must be enter
         """
-        self.add_generation()
-        if self.colony_number > 0:
+        overall_route_gen = {}
+        self.add_generation_number()
+        if self.generation_number > 0:
             j = 0
-            first_choose = []
-            # if with_core == True:
-            #     self.find_core_feature()
             while j < number_of_ants_next_generation:
                 next_ant = Ant(self)
-                # if with_core == True:
-                #     next_ant.choose_feature_gen_with_core(alpha, beta)
-                # else:
                 next_ant.build_route_next_gen(THRESHOLD, alpha, beta, with_core)
                 Colonies.overall_ant_route[f'Colony Number:{self.colony_number} ant-num:{j}'] = next_ant.ant_route
-                self.log[j] = next_ant.ant_route
-                print(f'ant_route: {next_ant.ant_route}')
+                overall_route_gen[f'ant_gen -> {j}'] = next_ant.ant_route
+                print(f'ant_route -> {next_ant.ant_route}')
                 j += 1
+            self.overall_route[f'colony_number -> {self.colonies_instance.colony_number}| generation_number -> {self.generation_number}'] = f'overall_ant_route_gen -> {overall_route_gen}'
             if change_pheromone:
                 self.change_pheromone(q=q, rho=phero_rate_decay)
-            self.get_log()
+                self.phero[f'colony_number -> {self.colonies_instance.colony_number}| generation_number -> {self.generation_number}'] = f'pheromone -> {Colonies.pheromone}'
         else:
             print("Colony generation doesnt initialized first!") 
-
-
-
-# Colony.initialize_colony(number_of_ants_first_generation=5,
-#                          init_criteria=3,
-#                          q=0.9,
-#                          phero_rate_decay=0.5,
-#                          make_change_pheromone=True,
-#                          with_core=True)
-    
-# Colony.generate_next_ants(number_of_ants_next_generation=4,
-#                           q=1,
-#                           phero_rate_decay=0.5,
-#                           THRESHOLD=[0.97, 'landa', 0.80],
-#                           alpha=0.8,
-#                           beta=0.2,
-
-#                           with_core=True)
-# print(Colonies.overall_ant_route)
