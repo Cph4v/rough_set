@@ -3,6 +3,8 @@
 
 This project explores feature selection techniques combining **Rough Set Theory** with **Ant Colony Optimization** (ACO). The repository includes implementations of various algorithms, specifically tailored for optimization tasks within rough set-based systems.
 
+This is a new feature importance technique based on probabilistic methods like rough set.
+
 ## Features
 - Ant Colony Optimization algorithms
 - Rough Set Theory-based feature selection
