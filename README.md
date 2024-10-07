@@ -10,13 +10,9 @@ This project explores feature selection techniques combining **Rough Set Theory*
 - Fuzzy rough set integration
 
 ## Installation
-1. Clone the repository:
+Clone the repository:
    ```bash
    git clone https://github.com/Cph4v/rough_set.git
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
    ```
 
 ## Usage
